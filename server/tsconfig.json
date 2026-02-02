@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "es2020",             /* Versión de JS moderna */
+    "module": "commonjs",           /* Estándar de Node.js */
+    "outDir": "./dist",             /* Dónde se guardará lo compilado */
+    "rootDir": "./src",             /* Dónde está tu código */
+    "strict": true,                 /* Modo estricto para evitar errores tontos */
+    "esModuleInterop": true,        /* Permite importar librerías viejas */
+    "skipLibCheck": true,           /* Acelera la compilación */
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*"],          /* Solo vigila la carpeta src */
+  "exclude": ["node_modules"]
+}

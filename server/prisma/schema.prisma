@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 1. Usuarios del sistema (Dueño, Vendedores)
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(SELLER)
+  createdAt DateTime @default(now())
+  sales     Sale[] // Relación: Un usuario hace muchas ventas
+}
+
+enum Role {
+  ADMIN
+  SELLER
+  STOCK_MANAGER
+}
+
+// 2. Inventario
+model Product {
+  id          Int          @id @default(autoincrement())
+  code        String       @unique // Código de barras
+  name        String
+  description String?
+  price       Decimal      @db.Decimal(10, 2) // Precio de venta
+  cost        Decimal      @db.Decimal(10, 2) // Precio de compra
+  stock       Int
+  minStock    Int          @default(5) // Para alertas
+  imageUrl    String?
+  categoryId  Int
+  category    Category     @relation(fields: [categoryId], references: [id])
+  saleDetails SaleDetail[]
+  createdAt   DateTime     @default(now())
+}
+
+model Category {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  products Product[]
+}
+
+// 3. Clientes
+model Client {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String?
+  phone     String?
+  taxId     String?  // RFC o DNI
+  sales     Sale[]
+  createdAt DateTime @default(now())
+}
+
+// 4. Ventas (Cabecera)
+model Sale {
+  id            Int          @id @default(autoincrement())
+  total         Decimal      @db.Decimal(10, 2)
+  paymentMethod String       @default("EFECTIVO")
+  status        SaleStatus   @default(COMPLETED)
+  
+  userId        Int
+  user          User         @relation(fields: [userId], references: [id])
+  
+  clientId      Int?         // Puede ser venta anónima (sin cliente)
+  client        Client?      @relation(fields: [clientId], references: [id])
+  
+  details       SaleDetail[] // Los productos de esta venta
+  createdAt     DateTime     @default(now())
+}
+
+enum SaleStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+}
+
+// 5. Detalle de Venta (Renglones del ticket)
+model SaleDetail {
+  id        Int     @id @default(autoincrement())
+  quantity  Int
+  price     Decimal @db.Decimal(10, 2) // Precio al momento de la venta
+  subtotal  Decimal @db.Decimal(10, 2)
+  
+  saleId    Int
+  sale      Sale    @relation(fields: [saleId], references: [id])
+  
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
+}
