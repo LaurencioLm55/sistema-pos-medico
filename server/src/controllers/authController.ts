@@ -30,6 +30,8 @@ export const register = async (req: Request, res: Response) => {
 
 // 2. LOGIN (Verificar credenciales y dar Token)
 export const login = async (req: Request, res: Response) => {
+  console.log("📢 INTENTO DE LOGIN RECIBIDO");
+  console.log("📧 Email:", req.body.email);
   try {
     const { email, password } = req.body;
 
@@ -54,6 +56,8 @@ export const login = async (req: Request, res: Response) => {
 
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
   } catch (error) {
-    res.status(500).json({ error: 'Error en el servidor' });
+    console.error("❌❌ ERROR FATAL EN LOGIN ❌❌");
+    console.error(error); // Esto imprimirá el error exacto
+    res.status(500).json({ message: "Error interno", error });
   }
 };
