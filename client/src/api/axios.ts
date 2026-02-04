@@ -1,8 +1,9 @@
 import axios from 'axios';
 
-// Creamos una instancia configurada
+const baseURL = 'https://api-pos-medico.onrender.com/api'; 
+
 const api = axios.create({
-  baseURL: 'http://localhost:3000/api', // La dirección de tu backend
+  baseURL: baseURL,
   headers: {
     'Content-Type': 'application/json',
   },
