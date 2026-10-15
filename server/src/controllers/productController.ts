@@ -19,6 +19,21 @@ export const createProduct = async (req: Request, res: Response) => {
     // Recibimos los datos del "cuerpo" de la petición
     const { code, name, price, cost, stock, categoryId } = req.body;
 
+    // --- INICIO CAMBIO: venta por pieza ---
+    // soldByPiece: el producto se puede vender también por pieza suelta (ej. gasas de una caja).
+    // Si viene en true, piecesPerBox y piecePrice son obligatorios para poder calcular
+    // el descuento de inventario y el precio de la pieza en cada venta.
+    const { soldByPiece, piecesPerBox, piecePrice, looseStock } = req.body;
+
+    if (soldByPiece) {
+      if (!piecesPerBox || Number(piecesPerBox) <= 0) {
+        return res.status(400).json({ error: 'piecesPerBox es obligatorio y debe ser mayor a 0 cuando soldByPiece es true' });
+      }
+      if (piecePrice === undefined || piecePrice === null || Number(piecePrice) <= 0) {
+        return res.status(400).json({ error: 'piecePrice es obligatorio y debe ser mayor a 0 cuando soldByPiece es true' });
+      }
+    }
+
     // Guardamos en Base de Datos
     const newProduct = await prisma.product.create({
       data: {
@@ -27,9 +42,14 @@ export const createProduct = async (req: Request, res: Response) => {
         price,
         cost,
         stock,
-        categoryId // Asume que la categoría ya existe (lo veremos luego)
+        categoryId, // Asume que la categoría ya existe (lo veremos luego)
+        soldByPiece: !!soldByPiece,
+        piecesPerBox: soldByPiece ? Number(piecesPerBox) : null,
+        piecePrice: soldByPiece ? Number(piecePrice) : null,
+        looseStock: soldByPiece && looseStock ? Number(looseStock) : 0
       }
     });
+    // --- FIN CAMBIO: venta por pieza ---
 
     res.status(201).json(newProduct);
   } catch (error) {
@@ -42,15 +62,35 @@ export const createProduct = async (req: Request, res: Response) => {
 export const updateProduct = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { code, name, price, cost, stock, categoryId } = req.body;
+
+  // --- INICIO CAMBIO: venta por pieza ---
+  const { soldByPiece, piecesPerBox, piecePrice, looseStock } = req.body;
+
+  if (soldByPiece) {
+    if (!piecesPerBox || Number(piecesPerBox) <= 0) {
+      return res.status(400).json({ error: 'piecesPerBox es obligatorio y debe ser mayor a 0 cuando soldByPiece es true' });
+    }
+    if (piecePrice === undefined || piecePrice === null || Number(piecePrice) <= 0) {
+      return res.status(400).json({ error: 'piecePrice es obligatorio y debe ser mayor a 0 cuando soldByPiece es true' });
+    }
+  }
+  // --- FIN CAMBIO: venta por pieza ---
+
   try {
     const updated = await prisma.product.update({
       where: { id: Number(id) },
-      data: { 
-        code, name, 
-        price: Number(price), 
-        cost: Number(cost), 
-        stock: Number(stock), 
-        categoryId: Number(categoryId) 
+      data: {
+        code, name,
+        price: Number(price),
+        cost: Number(cost),
+        stock: Number(stock),
+        categoryId: Number(categoryId),
+        // --- INICIO CAMBIO: venta por pieza ---
+        soldByPiece: !!soldByPiece,
+        piecesPerBox: soldByPiece ? Number(piecesPerBox) : null,
+        piecePrice: soldByPiece ? Number(piecePrice) : null,
+        ...(looseStock !== undefined ? { looseStock: Number(looseStock) } : {})
+        // --- FIN CAMBIO: venta por pieza ---
       }
     });
     res.json(updated);

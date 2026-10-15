@@ -30,15 +30,26 @@ model Product {
   code        String       @unique // Código de barras
   name        String
   description String?
-  price       Decimal      @db.Decimal(10, 2) // Precio de venta
+  price       Decimal      @db.Decimal(10, 2) // Precio de venta (por caja/unidad completa)
   cost        Decimal      @db.Decimal(10, 2) // Precio de compra
-  stock       Int
+  stock       Int          // Cajas/unidades completas en inventario
   minStock    Int          @default(5) // Para alertas
   imageUrl    String?
   categoryId  Int
   category    Category     @relation(fields: [categoryId], references: [id])
   saleDetails SaleDetail[]
   createdAt   DateTime     @default(now())
+
+  // --- INICIO CAMBIO: venta por pieza (ej. gasas de una caja) ---
+  // Si el producto puede venderse también por pieza suelta (no solo por caja completa).
+  soldByPiece  Boolean  @default(false)
+  // Cuántas piezas trae cada caja/unidad de "stock". Requerido si soldByPiece = true.
+  piecesPerBox Int?
+  // Precio de venta de una sola pieza. Requerido si soldByPiece = true.
+  piecePrice   Decimal? @db.Decimal(10, 2)
+  // Piezas sueltas disponibles de cajas ya abiertas (no cuentan como caja completa en "stock").
+  looseStock   Int      @default(0)
+  // --- FIN CAMBIO: venta por pieza ---
 }
 
 model Category {
@@ -93,10 +104,22 @@ model SaleDetail {
   quantity  Int
   price     Decimal @db.Decimal(10, 2) // Precio al momento de la venta
   subtotal  Decimal @db.Decimal(10, 2)
-  
+
   saleId    Int
   sale      Sale    @relation(fields: [saleId], references: [id])
-  
+
   productId Int
   product   Product @relation(fields: [productId], references: [id])
+
+  // --- INICIO CAMBIO: venta por pieza ---
+  // Indica si este renglón se vendió por caja/unidad completa (UNIT) o por pieza suelta (PIECE).
+  unitType  SaleUnitType @default(UNIT)
+  // --- FIN CAMBIO: venta por pieza ---
 }
+
+// --- INICIO CAMBIO: venta por pieza ---
+enum SaleUnitType {
+  UNIT  // Caja/unidad completa
+  PIECE // Pieza suelta
+}
+// --- FIN CAMBIO: venta por pieza ---
