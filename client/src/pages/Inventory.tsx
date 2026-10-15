@@ -74,6 +74,11 @@ export default function Inventory() {
                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${product.stock < 5 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-800'}`}>
                     {product.stock}
                   </span>
+                  {/* --- INICIO CAMBIO: venta por pieza --- */}
+                  {product.soldByPiece && (
+                    <div className="text-xs text-amber-700 mt-1">sueltas: {product.looseStock || 0}</div>
+                  )}
+                  {/* --- FIN CAMBIO: venta por pieza --- */}
                 </td>
                 <td className="p-4 text-center flex justify-center gap-2">
                   <button onClick={() => handleEdit(product)} className="text-blue-600 hover:text-blue-800 px-2 py-1 bg-blue-50 rounded" title="Editar">

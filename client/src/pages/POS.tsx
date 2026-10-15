@@ -2,9 +2,15 @@ import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import type { Product } from '../types';
 
+// --- INICIO CAMBIO: venta por pieza ---
+// unitType indica si este renglón del carrito es por caja completa (UNIT) o por pieza suelta (PIECE).
+// unitPrice es el precio que corresponde según unitType (product.price o product.piecePrice).
 interface CartItem extends Product {
   quantity: number;
+  unitType: 'UNIT' | 'PIECE';
+  unitPrice: number;
 }
+// --- FIN CAMBIO: venta por pieza ---
 
 export default function POS() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -21,34 +27,57 @@ export default function POS() {
 
   useEffect(() => { fetchProducts(); }, []);
 
-  // ... (Funciones addToCart, removeFromCart, updateQuantity QUEDAN IGUALES) ...
-  const addToCart = (product: Product) => {
+  // --- INICIO CAMBIO: venta por pieza ---
+  // Cada renglón del carrito se identifica por producto + unitType, porque el mismo
+  // producto puede venderse a la vez por caja (UNIT) y por pieza suelta (PIECE).
+  const addToCart = (product: Product, unitType: 'UNIT' | 'PIECE' = 'UNIT') => {
+    if (unitType === 'PIECE') {
+      // Tope aproximado para la UI: piezas sueltas disponibles + lo que darían las cajas completas.
+      const maxPieces = (product.looseStock || 0) + product.stock * (product.piecesPerBox || 0);
+      if (maxPieces <= 0) { alert("¡No hay piezas disponibles!"); return; }
+
+      setCart(prev => {
+        const existing = prev.find(item => item.id === product.id && item.unitType === 'PIECE');
+        if (existing) {
+          if (existing.quantity + 1 > maxPieces) { alert("¡Stock insuficiente para vender más piezas!"); return prev; }
+          return prev.map(item => item.id === product.id && item.unitType === 'PIECE' ? { ...item, quantity: item.quantity + 1 } : item);
+        }
+        return [...prev, { ...product, quantity: 1, unitType: 'PIECE', unitPrice: Number(product.piecePrice) }];
+      });
+      return;
+    }
+
     if (product.stock === 0) { alert("¡No hay stock!"); return; }
     setCart(prev => {
-      const existing = prev.find(item => item.id === product.id);
+      const existing = prev.find(item => item.id === product.id && item.unitType === 'UNIT');
       if (existing) {
         if (existing.quantity + 1 > product.stock) { alert("¡Stock insuficiente!"); return prev; }
-        return prev.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
+        return prev.map(item => item.id === product.id && item.unitType === 'UNIT' ? { ...item, quantity: item.quantity + 1 } : item);
       }
-      return [...prev, { ...product, quantity: 1 }];
+      return [...prev, { ...product, quantity: 1, unitType: 'UNIT', unitPrice: product.price }];
     });
   };
 
-  const removeFromCart = (productId: number) => setCart(prev => prev.filter(item => item.id !== productId));
+  const removeFromCart = (productId: number, unitType: 'UNIT' | 'PIECE') =>
+    setCart(prev => prev.filter(item => !(item.id === productId && item.unitType === unitType)));
 
-  const updateQuantity = (productId: number, delta: number) => {
+  const updateQuantity = (productId: number, unitType: 'UNIT' | 'PIECE', delta: number) => {
     setCart(prev => prev.map(item => {
-        if (item.id === productId) {
+        if (item.id === productId && item.unitType === unitType) {
           const newQty = item.quantity + delta;
-          if (newQty < 1) return item; 
-          if (newQty > item.stock) { alert("¡Tope de stock!"); return item; }
+          if (newQty < 1) return item;
+          const max = unitType === 'PIECE'
+            ? (item.looseStock || 0) + item.stock * (item.piecesPerBox || 0)
+            : item.stock;
+          if (newQty > max) { alert("¡Tope de stock!"); return item; }
           return { ...item, quantity: newQty };
         }
         return item;
     }));
   };
+  // --- FIN CAMBIO: venta por pieza ---
 
-  const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const total = cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
 
   // Filtro
   const filteredProducts = products.filter(p => 
@@ -66,7 +95,16 @@ export default function POS() {
   const handleFinalizeSale = async () => {
     try {
       await api.post('/sales', {
-        products: cart,
+        // --- INICIO CAMBIO: venta por pieza ---
+        // Mandamos quantity/price/unitType por renglón; el backend recalcula el precio
+        // real de la pieza en servidor (no confía en el price que viene del cliente).
+        products: cart.map(item => ({
+          id: item.id,
+          quantity: item.quantity,
+          price: item.unitPrice,
+          unitType: item.unitType
+        })),
+        // --- FIN CAMBIO: venta por pieza ---
         total: total,
         paymentMethod: paymentMethod // <--- Enviamos el método
       });
@@ -90,7 +128,7 @@ export default function POS() {
         </div>
         <div className="grid grid-cols-3 gap-4 overflow-y-auto pb-20 content-start">
           {filteredProducts.map(product => (
-            <div key={product.id} onClick={() => addToCart(product)}
+            <div key={product.id} onClick={() => addToCart(product, 'UNIT')}
               className={`p-4 rounded-lg shadow cursor-pointer transition border-l-4 ${product.stock === 0 ? 'bg-gray-200 opacity-60' : 'bg-white hover:bg-blue-50 border-blue-500'}`}>
               <div className="font-bold text-lg truncate">{product.name}</div>
               <div className="text-gray-500 text-sm mb-2">{product.code}</div>
@@ -98,6 +136,15 @@ export default function POS() {
                 <span className="font-bold text-xl text-green-600">${product.price}</span>
                 <span className="text-xs px-2 py-1 bg-gray-200 rounded">Stock: {product.stock}</span>
               </div>
+              {/* --- INICIO CAMBIO: venta por pieza --- */}
+              {product.soldByPiece && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); addToCart(product, 'PIECE'); }}
+                  className="mt-2 w-full text-xs font-bold bg-amber-100 text-amber-800 py-1.5 rounded hover:bg-amber-200">
+                  + Pieza (${product.piecePrice}) · sueltas: {product.looseStock || 0}
+                </button>
+              )}
+              {/* --- FIN CAMBIO: venta por pieza --- */}
             </div>
           ))}
         </div>
@@ -112,17 +159,21 @@ export default function POS() {
 
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
           {cart.map(item => (
-            <div key={item.id} className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 flex flex-col gap-2">
+            <div key={`${item.id}-${item.unitType}`} className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 flex flex-col gap-2">
               <div className="flex justify-between">
-                <div className="font-bold">{item.name}</div>
-                <div className="font-bold text-blue-900">${(item.price * item.quantity).toFixed(2)}</div>
+                <div className="font-bold">
+                  {item.name}
+                  {/* --- CAMBIO: venta por pieza (etiqueta de tipo de renglón) --- */}
+                  {item.unitType === 'PIECE' && <span className="ml-2 text-xs font-normal bg-amber-100 text-amber-800 px-2 py-0.5 rounded">pieza</span>}
+                </div>
+                <div className="font-bold text-blue-900">${(item.unitPrice * item.quantity).toFixed(2)}</div>
               </div>
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-3 bg-gray-100 rounded-lg p-1">
-                  <button onClick={() => removeFromCart(item.id)} className="w-8 h-8 text-red-500 bg-white rounded shadow-sm hover:bg-red-50">🗑️</button>
-                  <button onClick={() => updateQuantity(item.id, -1)} className="w-8 h-8 bg-white text-gray-700 rounded shadow-sm" disabled={item.quantity <= 1}>-</button>
+                  <button onClick={() => removeFromCart(item.id, item.unitType)} className="w-8 h-8 text-red-500 bg-white rounded shadow-sm hover:bg-red-50">🗑️</button>
+                  <button onClick={() => updateQuantity(item.id, item.unitType, -1)} className="w-8 h-8 bg-white text-gray-700 rounded shadow-sm" disabled={item.quantity <= 1}>-</button>
                   <span className="font-bold w-6 text-center">{item.quantity}</span>
-                  <button onClick={() => updateQuantity(item.id, 1)} className="w-8 h-8 bg-white text-blue-600 rounded shadow-sm">+</button>
+                  <button onClick={() => updateQuantity(item.id, item.unitType, 1)} className="w-8 h-8 bg-white text-blue-600 rounded shadow-sm">+</button>
                 </div>
               </div>
             </div>

@@ -9,4 +9,10 @@ export interface Product {
     id: number;
     name: string;
   };
+  // --- INICIO CAMBIO: venta por pieza ---
+  soldByPiece?: boolean;
+  piecesPerBox?: number | null;
+  piecePrice?: number | null;
+  looseStock?: number;
+  // --- FIN CAMBIO: venta por pieza ---
 }

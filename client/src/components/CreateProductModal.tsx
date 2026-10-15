@@ -17,7 +17,10 @@ interface Props {
 export default function CreateProductModal({ isOpen, onClose, onSuccess, productToEdit }: Props) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [formData, setFormData] = useState({
-    code: '', name: '', price: '', cost: '', stock: '', categoryId: 1
+    code: '', name: '', price: '', cost: '', stock: '', categoryId: 1,
+    // --- INICIO CAMBIO: venta por pieza ---
+    soldByPiece: false, piecesPerBox: '', piecePrice: ''
+    // --- FIN CAMBIO: venta por pieza ---
   });
   const [newCategoryName, setNewCategoryName] = useState(''); // Para crear categoría rápida
   const [showCatInput, setShowCatInput] = useState(false);
@@ -34,24 +37,45 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
           price: String(productToEdit.price),
           cost: String(productToEdit.cost || 0), // Asumiendo que cost puede no venir
           stock: String(productToEdit.stock),
-          categoryId: productToEdit.category.id
+          categoryId: productToEdit.category.id,
+          // --- INICIO CAMBIO: venta por pieza ---
+          soldByPiece: !!productToEdit.soldByPiece,
+          piecesPerBox: productToEdit.piecesPerBox ? String(productToEdit.piecesPerBox) : '',
+          piecePrice: productToEdit.piecePrice ? String(productToEdit.piecePrice) : ''
+          // --- FIN CAMBIO: venta por pieza ---
         });
       } else {
         // Limpiar si es nuevo
-        setFormData({ code: '', name: '', price: '', cost: '', stock: '', categoryId: 1 });
+        setFormData({
+          code: '', name: '', price: '', cost: '', stock: '', categoryId: 1,
+          soldByPiece: false, piecesPerBox: '', piecePrice: ''
+        });
       }
     }
   }, [isOpen, productToEdit]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // --- INICIO CAMBIO: venta por pieza ---
+    if (formData.soldByPiece && (!formData.piecesPerBox || !formData.piecePrice)) {
+      alert('Si el producto se vende por pieza, indica cuántas piezas trae la caja y el precio por pieza.');
+      return;
+    }
+    // --- FIN CAMBIO: venta por pieza ---
+
     try {
       const payload = {
         ...formData,
         price: Number(formData.price),
         cost: Number(formData.cost),
         stock: Number(formData.stock),
-        categoryId: Number(formData.categoryId)
+        categoryId: Number(formData.categoryId),
+        // --- INICIO CAMBIO: venta por pieza ---
+        soldByPiece: formData.soldByPiece,
+        piecesPerBox: formData.soldByPiece ? Number(formData.piecesPerBox) : null,
+        piecePrice: formData.soldByPiece ? Number(formData.piecePrice) : null
+        // --- FIN CAMBIO: venta por pieza ---
       };
 
       if (productToEdit) {
@@ -154,6 +178,34 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
                 value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} />
             </div>
           </div>
+
+          {/* --- INICIO CAMBIO: venta por pieza --- */}
+          <div className="border-t pt-4">
+            <label className="flex items-center gap-2 text-sm font-bold text-gray-700">
+              <input type="checkbox"
+                checked={formData.soldByPiece}
+                onChange={e => setFormData({...formData, soldByPiece: e.target.checked})} />
+              ¿Se vende también por pieza? (ej. gasas sueltas de una caja)
+            </label>
+
+            {formData.soldByPiece && (
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700">Piezas por caja</label>
+                  <input type="number" min="1" required className="w-full border p-2 rounded"
+                    value={formData.piecesPerBox}
+                    onChange={e => setFormData({...formData, piecesPerBox: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700">Precio por pieza</label>
+                  <input type="number" step="0.01" min="0.01" required className="w-full border p-2 rounded"
+                    value={formData.piecePrice}
+                    onChange={e => setFormData({...formData, piecePrice: e.target.value})} />
+                </div>
+              </div>
+            )}
+          </div>
+          {/* --- FIN CAMBIO: venta por pieza --- */}
 
           <div className="flex justify-end gap-2 mt-6">
             <button type="button" onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">Cancelar</button>
