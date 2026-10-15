@@ -163,12 +163,12 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
           {/* Precios y Stock */}
           <div className="grid grid-cols-3 gap-2">
             <div>
-              <label className="block text-xs font-bold text-gray-700">Costo</label>
+              <label className="block text-xs font-bold text-gray-700">Precio de proveedor</label>
               <input type="number" step="0.01" required className="w-full border p-2 rounded"
                 value={formData.cost} onChange={e => setFormData({...formData, cost: e.target.value})} />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-700">Precio</label>
+              <label className="block text-xs font-bold text-gray-700">Precio de venta</label>
               <input type="number" step="0.01" required className="w-full border p-2 rounded"
                 value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} />
             </div>
@@ -197,7 +197,7 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
                     onChange={e => setFormData({...formData, piecesPerBox: e.target.value})} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-700">Precio por pieza</label>
+                  <label className="block text-xs font-bold text-gray-700">Precio de venta por pieza</label>
                   <input type="number" step="0.01" min="0.01" required className="w-full border p-2 rounded"
                     value={formData.piecePrice}
                     onChange={e => setFormData({...formData, piecePrice: e.target.value})} />

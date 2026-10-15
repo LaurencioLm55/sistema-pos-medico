@@ -58,7 +58,7 @@ export default function Inventory() {
               <th className="p-4">Código</th>
               <th className="p-4">Producto</th>
               <th className="p-4">Categoría</th>
-              <th className="p-4">Precio</th>
+              <th className="p-4">Precio de venta</th>
               <th className="p-4 text-center">Stock</th>
               <th className="p-4 text-center">Acciones</th>
             </tr>
