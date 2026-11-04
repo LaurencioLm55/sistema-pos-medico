@@ -1,34 +1,43 @@
-import { Response } from 'express'; 
+import { Response } from 'express';
 import { prisma } from '../lib/prisma';
-import { AuthRequest } from '../middlewares/authMiddleware'; 
+import { AuthRequest } from '../middlewares/authMiddleware';
+
+// Redondeo a 2 decimales para importes en pesos
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export const createSale = async (req: AuthRequest, res: Response) => {
   try {
-    const { products, total, paymentMethod} = req.body; 
-    const userId = req.userId; 
+    const { products, paymentMethod } = req.body;
+    const userId = req.userId;
 
     if (!userId) return res.status(401).json({ error: 'Usuario no identificado' });
 
-    const result = await prisma.$transaction(async (tx) => {
-      const sale = await tx.sale.create({
-        data: {
-          total: total,
-          paymentMethod: paymentMethod || 'EFECTIVO', // Si no envían nada, asume Efectivo
-          userId: userId, 
-        }
-      });
+    if (!Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({ error: 'La venta no tiene productos' });
+    }
 
-      // 2. Procesar cada producto
+    const result = await prisma.$transaction(async (tx) => {
+      // --- INICIO CAMBIO: venta por pieza ---
+      // Los precios y el total se calculan aquí con los datos de la BD; no se confía
+      // en el price/total que manda el cliente.
+      const details: { productId: number; quantity: number; price: number; subtotal: number; unitType: 'UNIT' | 'PIECE' }[] = [];
+
       for (const item of products) {
-        // A. Verificar stock actual
-        const productInDb = await tx.product.findUnique({ where: { id: item.id } });
+        const productId = Number(item.id);
+        const quantity = Number(item.quantity);
+
+        if (!Number.isInteger(quantity) || quantity <= 0) {
+          throw new Error('La cantidad de cada producto debe ser un número entero mayor a 0');
+        }
+
+        // Se vuelve a leer en cada renglón: si el mismo producto viene por caja y por
+        // pieza, el segundo renglón ya ve el inventario descontado por el primero.
+        const productInDb = await tx.product.findUnique({ where: { id: productId } });
         if (!productInDb) {
           throw new Error(`Producto no encontrado: ${item.id}`);
         }
 
-        // --- INICIO CAMBIO: venta por pieza ---
-        // El frontend indica cómo se vendió cada renglón: 'UNIT' (caja/unidad completa,
-        // comportamiento de siempre) o 'PIECE' (pieza suelta, ej. una gasa de la caja).
+        // 'UNIT' = caja/unidad completa (comportamiento de siempre), 'PIECE' = pieza suelta.
         const unitType: 'UNIT' | 'PIECE' = item.unitType === 'PIECE' ? 'PIECE' : 'UNIT';
 
         if (unitType === 'PIECE') {
@@ -36,76 +45,64 @@ export const createSale = async (req: AuthRequest, res: Response) => {
             throw new Error(`El producto "${productInDb.name}" no está configurado para venta por pieza`);
           }
 
-          const piecesNeeded = item.quantity;
           const piecesPerBox = productInDb.piecesPerBox;
 
-          // Primero se consumen las piezas sueltas de cajas ya abiertas.
-          // Si no alcanzan, se abren cajas completas del stock (una por una, solo las necesarias)
-          // y el sobrante de piezas de esas cajas queda como nuevo looseStock.
-          const boxesToOpen = piecesNeeded > productInDb.looseStock
-            ? Math.ceil((piecesNeeded - productInDb.looseStock) / piecesPerBox)
-            : 0;
+          // Primero se consumen las piezas sueltas de cajas ya abiertas. Si no alcanzan,
+          // se abren solo las cajas completas necesarias y el sobrante queda como piezas sueltas.
+          // Ej.: caja de 10, stock 3, sueltas 2, se venden 5 → se abre 1 caja → stock 2, sueltas 7.
+          const missing = quantity - productInDb.looseStock;
+          const boxesToOpen = missing > 0 ? Math.ceil(missing / piecesPerBox) : 0;
 
           if (boxesToOpen > productInDb.stock) {
-            throw new Error(`Stock insuficiente para vender por pieza el producto: ${productInDb.name}`);
+            const available = productInDb.looseStock + productInDb.stock * piecesPerBox;
+            throw new Error(`Stock insuficiente de "${productInDb.name}": se pidieron ${quantity} piezas y solo hay ${available}`);
           }
 
-          const newLooseStock = (productInDb.looseStock + boxesToOpen * piecesPerBox) - piecesNeeded;
+          const newLooseStock = productInDb.looseStock + boxesToOpen * piecesPerBox - quantity;
 
-          await tx.product.update({
-            where: { id: item.id },
-            data: {
-              stock: { decrement: boxesToOpen },
-              looseStock: newLooseStock
-            }
+          // El where con los valores leídos evita que dos ventas simultáneas descuenten
+          // sobre el mismo inventario (si otra venta lo cambió, no se actualiza nada).
+          const updated = await tx.product.updateMany({
+            where: { id: productId, stock: productInDb.stock, looseStock: productInDb.looseStock },
+            data: { stock: { decrement: boxesToOpen }, looseStock: newLooseStock }
           });
+          if (updated.count === 0) {
+            throw new Error(`El inventario de "${productInDb.name}" cambió mientras se cobraba. Intenta de nuevo.`);
+          }
 
-          // El precio se toma del producto en BD (piecePrice), no del body, para que
-          // el cliente no pueda manipular el precio de venta por pieza.
           const piecePrice = Number(productInDb.piecePrice);
-
-          await tx.saleDetail.create({
-            data: {
-              saleId: sale.id,
-              productId: item.id,
-              quantity: item.quantity,
-              price: piecePrice,
-              subtotal: piecePrice * item.quantity,
-              unitType: 'PIECE'
-            }
-          });
-
+          details.push({ productId, quantity, price: piecePrice, subtotal: round2(piecePrice * quantity), unitType: 'PIECE' });
           continue;
         }
-        // --- FIN CAMBIO: venta por pieza ---
 
-        if (productInDb.stock < item.quantity) {
-          throw new Error(`Stock insuficiente para el producto: ${productInDb?.name}`);
+        // Venta por caja/unidad completa: solo se descuenta del stock de cajas completas
+        // (las piezas sueltas no se pueden vender como caja).
+        const updated = await tx.product.updateMany({
+          where: { id: productId, stock: { gte: quantity } },
+          data: { stock: { decrement: quantity } }
+        });
+        if (updated.count === 0) {
+          throw new Error(`Stock insuficiente de "${productInDb.name}": se pidieron ${quantity} y solo hay ${productInDb.stock}`);
         }
 
-        // B. Restar stock
-        await tx.product.update({
-          where: { id: item.id },
-          data: { stock: { decrement: item.quantity } }
-        });
-
-        // C. Crear detalle de venta
-        await tx.saleDetail.create({
-          data: {
-            saleId: sale.id,
-            productId: item.id,
-            quantity: item.quantity,
-            price: item.price,
-            subtotal: item.price * item.quantity,
-            unitType: 'UNIT' // --- CAMBIO: venta por pieza (registro explícito del tipo) ---
-          }
-        });
+        const unitPrice = Number(productInDb.price);
+        details.push({ productId, quantity, price: unitPrice, subtotal: round2(unitPrice * quantity), unitType: 'UNIT' });
       }
 
-      return sale;
-    });
+      const total = round2(details.reduce((sum, d) => sum + d.subtotal, 0));
 
-    res.json({ success: true, saleId: result.id });
+      return tx.sale.create({
+        data: {
+          total,
+          paymentMethod: paymentMethod || 'EFECTIVO', // Si no envían nada, asume Efectivo
+          userId: userId,
+          details: { create: details }
+        }
+      });
+      // --- FIN CAMBIO: venta por pieza ---
+    }, { timeout: 15000 });
+
+    res.json({ success: true, saleId: result.id, total: result.total });
 
   } catch (error: any) {
     console.error(error);
@@ -120,10 +117,10 @@ export const getSales = async (req: AuthRequest, res: Response) => {
   try {
     const sales = await prisma.sale.findMany({
       orderBy: { createdAt: 'desc' }, // Las más nuevas primero
-      include: { 
+      include: {
         details: { // Incluir los detalles (qué productos se vendieron)
           include: { product: true }
-        } 
+        }
       }
     });
     res.json(sales);

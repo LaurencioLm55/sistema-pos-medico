@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../api/axios';
 import type { Product } from '../types';
+import { money } from '../utils/products';
 
 interface Category {
   id: number;
@@ -19,7 +20,7 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
   const [formData, setFormData] = useState({
     code: '', name: '', price: '', cost: '', stock: '', categoryId: 1,
     // --- INICIO CAMBIO: venta por pieza ---
-    soldByPiece: false, piecesPerBox: '', piecePrice: ''
+    soldByPiece: false, piecesPerBox: '', piecePrice: '', looseStock: ''
     // --- FIN CAMBIO: venta por pieza ---
   });
   const [newCategoryName, setNewCategoryName] = useState(''); // Para crear categoría rápida
@@ -28,7 +29,12 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
   // Cargar categorías y datos si es edición
   useEffect(() => {
     if (isOpen) {
-      api.get('/categories').then(res => setCategories(res.data));
+      api.get('/categories').then(res => {
+        setCategories(res.data);
+        if (!productToEdit && res.data.length > 0) {
+          setFormData(prev => ({ ...prev, categoryId: res.data[0].id }));
+        }
+      });
       
       if (productToEdit) {
         setFormData({
@@ -41,14 +47,15 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
           // --- INICIO CAMBIO: venta por pieza ---
           soldByPiece: !!productToEdit.soldByPiece,
           piecesPerBox: productToEdit.piecesPerBox ? String(productToEdit.piecesPerBox) : '',
-          piecePrice: productToEdit.piecePrice ? String(productToEdit.piecePrice) : ''
+          piecePrice: productToEdit.piecePrice ? String(productToEdit.piecePrice) : '',
+          looseStock: String(productToEdit.looseStock || 0)
           // --- FIN CAMBIO: venta por pieza ---
         });
       } else {
         // Limpiar si es nuevo
         setFormData({
           code: '', name: '', price: '', cost: '', stock: '', categoryId: 1,
-          soldByPiece: false, piecesPerBox: '', piecePrice: ''
+          soldByPiece: false, piecesPerBox: '', piecePrice: '', looseStock: ''
         });
       }
     }
@@ -58,9 +65,15 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
     e.preventDefault();
 
     // --- INICIO CAMBIO: venta por pieza ---
-    if (formData.soldByPiece && (!formData.piecesPerBox || !formData.piecePrice)) {
-      alert('Si el producto se vende por pieza, indica cuántas piezas trae la caja y el precio por pieza.');
-      return;
+    if (formData.soldByPiece) {
+      if (!Number.isInteger(Number(formData.piecesPerBox)) || Number(formData.piecesPerBox) <= 0) {
+        alert('Indica cuántas piezas trae cada caja (número entero mayor a 0).');
+        return;
+      }
+      if (!(Number(formData.piecePrice) > 0)) {
+        alert('Indica el precio de venta por pieza (mayor a 0).');
+        return;
+      }
     }
     // --- FIN CAMBIO: venta por pieza ---
 
@@ -74,7 +87,8 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
         // --- INICIO CAMBIO: venta por pieza ---
         soldByPiece: formData.soldByPiece,
         piecesPerBox: formData.soldByPiece ? Number(formData.piecesPerBox) : null,
-        piecePrice: formData.soldByPiece ? Number(formData.piecePrice) : null
+        piecePrice: formData.soldByPiece ? Number(formData.piecePrice) : null,
+        looseStock: formData.soldByPiece ? Number(formData.looseStock || 0) : undefined
         // --- FIN CAMBIO: venta por pieza ---
       };
 
@@ -87,8 +101,8 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
       alert(`Producto ${productToEdit ? 'actualizado' : 'creado'} con éxito ✅`);
       onSuccess();
       onClose();
-    } catch (error) {
-      alert('Error al guardar.');
+    } catch (error: any) {
+      alert('Error al guardar: ' + (error.response?.data?.error || 'Falló la conexión con el servidor'));
     }
   };
 
@@ -168,12 +182,16 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
                 value={formData.cost} onChange={e => setFormData({...formData, cost: e.target.value})} />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-700">Precio de venta</label>
+              <label className="block text-xs font-bold text-gray-700">
+                {formData.soldByPiece ? 'Precio de venta (caja)' : 'Precio de venta'}
+              </label>
               <input type="number" step="0.01" required className="w-full border p-2 rounded"
                 value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-700">Stock</label>
+              <label className="block text-xs font-bold text-gray-700">
+                {formData.soldByPiece ? 'Stock (cajas completas)' : 'Stock'}
+              </label>
               <input type="number" required className="w-full border p-2 rounded"
                 value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} />
             </div>
@@ -189,20 +207,38 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
             </label>
 
             {formData.soldByPiece && (
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700">Piezas por caja</label>
-                  <input type="number" min="1" required className="w-full border p-2 rounded"
-                    value={formData.piecesPerBox}
-                    onChange={e => setFormData({...formData, piecesPerBox: e.target.value})} />
+              <>
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700">Piezas por caja</label>
+                    <input type="number" min="1" step="1" required className="w-full border p-2 rounded"
+                      value={formData.piecesPerBox}
+                      onChange={e => setFormData({...formData, piecesPerBox: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700">Precio de venta por pieza</label>
+                    <input type="number" step="0.01" min="0.01" required className="w-full border p-2 rounded"
+                      value={formData.piecePrice}
+                      onChange={e => setFormData({...formData, piecePrice: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700">Piezas sueltas</label>
+                    <input type="number" min="0" step="1" className="w-full border p-2 rounded" placeholder="0"
+                      value={formData.looseStock}
+                      onChange={e => setFormData({...formData, looseStock: e.target.value})} />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700">Precio de venta por pieza</label>
-                  <input type="number" step="0.01" min="0.01" required className="w-full border p-2 rounded"
-                    value={formData.piecePrice}
-                    onChange={e => setFormData({...formData, piecePrice: e.target.value})} />
-                </div>
-              </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  "Piezas sueltas" son las que quedan de una caja ya abierta. Al vender por pieza se descuentan
+                  primero las sueltas y, si no alcanzan, se abre una caja del stock automáticamente.
+                </p>
+                {Number(formData.piecesPerBox) > 0 && Number(formData.price) > 0 && (
+                  <p className="text-xs text-amber-700 mt-1">
+                    Caja: {money(formData.price)} · Pieza a precio de caja: {money(Number(formData.price) / Number(formData.piecesPerBox))}
+                    {Number(formData.piecePrice) > 0 && <> · Caja vendida por piezas: {money(Number(formData.piecePrice) * Number(formData.piecesPerBox))}</>}
+                  </p>
+                )}
+              </>
             )}
           </div>
           {/* --- FIN CAMBIO: venta por pieza --- */}

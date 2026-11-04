@@ -1,11 +1,54 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma'; // Importamos la conexión que acabamos de crear
 
+// --- INICIO CAMBIO: venta por pieza ---
+// Valida y normaliza los campos de venta por pieza que vienen del formulario.
+// Si soldByPiece es true:
+//   - piecesPerBox: cuántas piezas trae cada caja (entero > 0)
+//   - piecePrice:   precio de venta de UNA pieza (> 0)
+//   - looseStock:   piezas sueltas de cajas ya abiertas (entero >= 0, opcional)
+// Si soldByPiece es false, piecesPerBox y piecePrice se limpian y looseStock se deja como está.
+const parsePieceFields = (body: any) => {
+  const soldByPiece = !!body.soldByPiece;
+
+  if (!soldByPiece) {
+    return { data: { soldByPiece: false, piecesPerBox: null, piecePrice: null } };
+  }
+
+  const piecesPerBox = Number(body.piecesPerBox);
+  const piecePrice = Number(body.piecePrice);
+
+  if (!Number.isInteger(piecesPerBox) || piecesPerBox <= 0) {
+    return { error: 'Las piezas por caja deben ser un número entero mayor a 0' };
+  }
+  if (!Number.isFinite(piecePrice) || piecePrice <= 0) {
+    return { error: 'El precio por pieza debe ser mayor a 0' };
+  }
+
+  const data: { soldByPiece: boolean; piecesPerBox: number; piecePrice: number; looseStock?: number } = {
+    soldByPiece: true,
+    piecesPerBox,
+    piecePrice
+  };
+
+  if (body.looseStock !== undefined && body.looseStock !== null && body.looseStock !== '') {
+    const looseStock = Number(body.looseStock);
+    if (!Number.isInteger(looseStock) || looseStock < 0) {
+      return { error: 'Las piezas sueltas deben ser un número entero mayor o igual a 0' };
+    }
+    data.looseStock = looseStock;
+  }
+
+  return { data };
+};
+// --- FIN CAMBIO: venta por pieza ---
+
 // 1. OBTENER TODOS LOS PRODUCTOS
 export const getProducts = async (req: Request, res: Response) => {
   try {
     const products = await prisma.product.findMany({
-      include: { category: true } // Traer también el nombre de la categoría
+      include: { category: true }, // Traer también el nombre de la categoría
+      orderBy: { name: 'asc' }
     });
     res.json(products);
   } catch (error) {
@@ -15,41 +58,26 @@ export const getProducts = async (req: Request, res: Response) => {
 
 // 2. CREAR UN PRODUCTO
 export const createProduct = async (req: Request, res: Response) => {
+  // Recibimos los datos del "cuerpo" de la petición
+  const { code, name, price, cost, stock, categoryId } = req.body;
+
+  // --- CAMBIO: venta por pieza ---
+  const piece = parsePieceFields(req.body);
+  if (piece.error) return res.status(400).json({ error: piece.error });
+
   try {
-    // Recibimos los datos del "cuerpo" de la petición
-    const { code, name, price, cost, stock, categoryId } = req.body;
-
-    // --- INICIO CAMBIO: venta por pieza ---
-    // soldByPiece: el producto se puede vender también por pieza suelta (ej. gasas de una caja).
-    // Si viene en true, piecesPerBox y piecePrice son obligatorios para poder calcular
-    // el descuento de inventario y el precio de la pieza en cada venta.
-    const { soldByPiece, piecesPerBox, piecePrice, looseStock } = req.body;
-
-    if (soldByPiece) {
-      if (!piecesPerBox || Number(piecesPerBox) <= 0) {
-        return res.status(400).json({ error: 'piecesPerBox es obligatorio y debe ser mayor a 0 cuando soldByPiece es true' });
-      }
-      if (piecePrice === undefined || piecePrice === null || Number(piecePrice) <= 0) {
-        return res.status(400).json({ error: 'piecePrice es obligatorio y debe ser mayor a 0 cuando soldByPiece es true' });
-      }
-    }
-
     // Guardamos en Base de Datos
     const newProduct = await prisma.product.create({
       data: {
         code,
         name,
-        price,
-        cost,
-        stock,
-        categoryId, // Asume que la categoría ya existe (lo veremos luego)
-        soldByPiece: !!soldByPiece,
-        piecesPerBox: soldByPiece ? Number(piecesPerBox) : null,
-        piecePrice: soldByPiece ? Number(piecePrice) : null,
-        looseStock: soldByPiece && looseStock ? Number(looseStock) : 0
+        price: Number(price),
+        cost: Number(cost),
+        stock: Number(stock),
+        categoryId: Number(categoryId),
+        ...piece.data
       }
     });
-    // --- FIN CAMBIO: venta por pieza ---
 
     res.status(201).json(newProduct);
   } catch (error) {
@@ -63,18 +91,9 @@ export const updateProduct = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { code, name, price, cost, stock, categoryId } = req.body;
 
-  // --- INICIO CAMBIO: venta por pieza ---
-  const { soldByPiece, piecesPerBox, piecePrice, looseStock } = req.body;
-
-  if (soldByPiece) {
-    if (!piecesPerBox || Number(piecesPerBox) <= 0) {
-      return res.status(400).json({ error: 'piecesPerBox es obligatorio y debe ser mayor a 0 cuando soldByPiece es true' });
-    }
-    if (piecePrice === undefined || piecePrice === null || Number(piecePrice) <= 0) {
-      return res.status(400).json({ error: 'piecePrice es obligatorio y debe ser mayor a 0 cuando soldByPiece es true' });
-    }
-  }
-  // --- FIN CAMBIO: venta por pieza ---
+  // --- CAMBIO: venta por pieza ---
+  const piece = parsePieceFields(req.body);
+  if (piece.error) return res.status(400).json({ error: piece.error });
 
   try {
     const updated = await prisma.product.update({
@@ -85,16 +104,12 @@ export const updateProduct = async (req: Request, res: Response) => {
         cost: Number(cost),
         stock: Number(stock),
         categoryId: Number(categoryId),
-        // --- INICIO CAMBIO: venta por pieza ---
-        soldByPiece: !!soldByPiece,
-        piecesPerBox: soldByPiece ? Number(piecesPerBox) : null,
-        piecePrice: soldByPiece ? Number(piecePrice) : null,
-        ...(looseStock !== undefined ? { looseStock: Number(looseStock) } : {})
-        // --- FIN CAMBIO: venta por pieza ---
+        ...piece.data
       }
     });
     res.json(updated);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: 'Error al actualizar' });
   }
 };

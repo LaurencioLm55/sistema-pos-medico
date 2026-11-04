@@ -6,6 +6,7 @@ interface SaleDetail {
   quantity: number;
   price: number;
   subtotal: number;
+  unitType?: 'UNIT' | 'PIECE'; // --- CAMBIO: venta por pieza ---
   product: { name: string; code: string; };
 }
 
@@ -100,7 +101,12 @@ export default function SalesHistory() {
                         <div className="font-medium text-gray-800">{detail.product.name}</div>
                         <div className="text-xs text-gray-400">{detail.product.code}</div>
                       </td>
-                      <td className="text-center py-3">x{detail.quantity}</td>
+                      <td className="text-center py-3">
+                        x{detail.quantity}
+                        {/* --- CAMBIO: venta por pieza --- */}
+                        {detail.unitType === 'PIECE' && <span className="ml-1 text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">pieza</span>}
+                        <div className="text-xs text-gray-400">${Number(detail.price).toFixed(2)} c/u</div>
+                      </td>
                       <td className="text-right py-3 font-medium">${Number(detail.subtotal).toFixed(2)}</td>
                     </tr>
                   ))}

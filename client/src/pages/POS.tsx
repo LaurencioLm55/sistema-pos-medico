@@ -1,88 +1,91 @@
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import type { Product } from '../types';
+import { matchesSearch, maxQuantity, money } from '../utils/products';
 
 // --- INICIO CAMBIO: venta por pieza ---
-// unitType indica si este renglón del carrito es por caja completa (UNIT) o por pieza suelta (PIECE).
-// unitPrice es el precio que corresponde según unitType (product.price o product.piecePrice).
-interface CartItem extends Product {
+// Cada renglón del carrito es un producto + cómo se vende: por caja/unidad completa (UNIT)
+// o por pieza suelta (PIECE). El mismo producto puede estar en ambos renglones a la vez.
+// Los datos del producto (precio, stock) se toman siempre de la lista actual de productos,
+// para que los topes de stock no se queden con valores viejos.
+type UnitType = 'UNIT' | 'PIECE';
+
+interface CartLine {
+  productId: number;
+  unitType: UnitType;
   quantity: number;
-  unitType: 'UNIT' | 'PIECE';
-  unitPrice: number;
 }
+
+const unitPriceOf = (product: Product, unitType: UnitType) =>
+  Number(unitType === 'PIECE' ? product.piecePrice : product.price);
 // --- FIN CAMBIO: venta por pieza ---
 
 export default function POS() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<CartLine[]>([]);
   const [search, setSearch] = useState('');
-  
+
   // Estados para el Modal de Pago
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('EFECTIVO');
 
   const fetchProducts = () => {
-    api.get('/products').then(res => setProducts(res.data));
+    api.get('/products').then(res => setProducts(res.data)).catch(() => {});
   };
 
   useEffect(() => { fetchProducts(); }, []);
 
   // --- INICIO CAMBIO: venta por pieza ---
-  // Cada renglón del carrito se identifica por producto + unitType, porque el mismo
-  // producto puede venderse a la vez por caja (UNIT) y por pieza suelta (PIECE).
-  const addToCart = (product: Product, unitType: 'UNIT' | 'PIECE' = 'UNIT') => {
-    if (unitType === 'PIECE') {
-      // Tope aproximado para la UI: piezas sueltas disponibles + lo que darían las cajas completas.
-      const maxPieces = (product.looseStock || 0) + product.stock * (product.piecesPerBox || 0);
-      if (maxPieces <= 0) { alert("¡No hay piezas disponibles!"); return; }
+  const findProduct = (productId: number) => products.find(p => p.id === productId);
 
-      setCart(prev => {
-        const existing = prev.find(item => item.id === product.id && item.unitType === 'PIECE');
-        if (existing) {
-          if (existing.quantity + 1 > maxPieces) { alert("¡Stock insuficiente para vender más piezas!"); return prev; }
-          return prev.map(item => item.id === product.id && item.unitType === 'PIECE' ? { ...item, quantity: item.quantity + 1 } : item);
-        }
-        return [...prev, { ...product, quantity: 1, unitType: 'PIECE', unitPrice: Number(product.piecePrice) }];
-      });
-      return;
+  const qtyInCart = (lines: CartLine[], productId: number, unitType: UnitType) =>
+    lines.find(l => l.productId === productId && l.unitType === unitType)?.quantity ?? 0;
+
+  // Tope de un renglón descontando lo que ya hay del mismo producto en el otro renglón
+  // (ej. si hay 1 caja en el carrito, esas piezas ya no se pueden vender sueltas).
+  const maxFor = (lines: CartLine[], product: Product, unitType: UnitType) =>
+    maxQuantity(product, unitType, qtyInCart(lines, product.id, unitType === 'UNIT' ? 'PIECE' : 'UNIT'));
+
+  const setLineQuantity = (productId: number, unitType: UnitType, quantity: number) => {
+    const product = findProduct(productId);
+    if (!product) return;
+
+    const max = maxFor(cart, product, unitType);
+    if (quantity > max) {
+      alert(max === 0
+        ? `¡No hay ${unitType === 'PIECE' ? 'piezas' : 'cajas completas'} disponibles de ${product.name}!`
+        : `Stock insuficiente: máximo ${max} ${unitType === 'PIECE' ? 'piezas' : 'unidades'} de ${product.name}.`);
+      quantity = max;
     }
 
-    if (product.stock === 0) { alert("¡No hay stock!"); return; }
     setCart(prev => {
-      const existing = prev.find(item => item.id === product.id && item.unitType === 'UNIT');
-      if (existing) {
-        if (existing.quantity + 1 > product.stock) { alert("¡Stock insuficiente!"); return prev; }
-        return prev.map(item => item.id === product.id && item.unitType === 'UNIT' ? { ...item, quantity: item.quantity + 1 } : item);
-      }
-      return [...prev, { ...product, quantity: 1, unitType: 'UNIT', unitPrice: product.price }];
+      if (quantity < 1) return prev.filter(l => !(l.productId === productId && l.unitType === unitType));
+      const exists = prev.some(l => l.productId === productId && l.unitType === unitType);
+      return exists
+        ? prev.map(l => l.productId === productId && l.unitType === unitType ? { ...l, quantity } : l)
+        : [...prev, { productId, unitType, quantity }];
     });
   };
 
-  const removeFromCart = (productId: number, unitType: 'UNIT' | 'PIECE') =>
-    setCart(prev => prev.filter(item => !(item.id === productId && item.unitType === unitType)));
+  const addToCart = (product: Product, unitType: UnitType = 'UNIT') =>
+    setLineQuantity(product.id, unitType, qtyInCart(cart, product.id, unitType) + 1);
 
-  const updateQuantity = (productId: number, unitType: 'UNIT' | 'PIECE', delta: number) => {
-    setCart(prev => prev.map(item => {
-        if (item.id === productId && item.unitType === unitType) {
-          const newQty = item.quantity + delta;
-          if (newQty < 1) return item;
-          const max = unitType === 'PIECE'
-            ? (item.looseStock || 0) + item.stock * (item.piecesPerBox || 0)
-            : item.stock;
-          if (newQty > max) { alert("¡Tope de stock!"); return item; }
-          return { ...item, quantity: newQty };
-        }
-        return item;
-    }));
-  };
+  const removeFromCart = (productId: number, unitType: UnitType) =>
+    setCart(prev => prev.filter(l => !(l.productId === productId && l.unitType === unitType)));
+
+  // Renglones del carrito con los datos actuales del producto
+  const cartItems = cart.flatMap(line => {
+    const product = findProduct(line.productId);
+    if (!product) return [];
+    const unitPrice = unitPriceOf(product, line.unitType);
+    return [{ ...line, product, unitPrice, subtotal: unitPrice * line.quantity }];
+  });
+
+  const total = cartItems.reduce((sum, item) => sum + item.subtotal, 0);
   // --- FIN CAMBIO: venta por pieza ---
 
-  const total = cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
-
-  // Filtro
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(search.toLowerCase()) || p.code.includes(search)
-  );
+  // --- CAMBIO: búsqueda de productos (sin acentos, por nombre, código o categoría) ---
+  const filteredProducts = products.filter(p => matchesSearch(p, search));
 
   // --- NUEVA LÓGICA DE PAGO ---
 
@@ -96,16 +99,13 @@ export default function POS() {
     try {
       await api.post('/sales', {
         // --- INICIO CAMBIO: venta por pieza ---
-        // Mandamos quantity/price/unitType por renglón; el backend recalcula el precio
-        // real de la pieza en servidor (no confía en el price que viene del cliente).
-        products: cart.map(item => ({
-          id: item.id,
-          quantity: item.quantity,
-          price: item.unitPrice,
-          unitType: item.unitType
+        // Solo se manda qué y cuánto; el backend calcula precios y total con los datos de la BD.
+        products: cart.map(line => ({
+          id: line.productId,
+          quantity: line.quantity,
+          unitType: line.unitType
         })),
         // --- FIN CAMBIO: venta por pieza ---
-        total: total,
         paymentMethod: paymentMethod // <--- Enviamos el método
       });
       alert('¡Venta registrada con éxito! 💰');
@@ -115,6 +115,7 @@ export default function POS() {
       fetchProducts();
     } catch (error: any) {
       alert('Error: ' + (error.response?.data?.error || 'Falló la venta'));
+      fetchProducts(); // Por si el stock cambió, refrescar los topes
     }
   };
 
@@ -127,26 +128,37 @@ export default function POS() {
             value={search} onChange={e => setSearch(e.target.value)} autoFocus />
         </div>
         <div className="grid grid-cols-3 gap-4 overflow-y-auto pb-20 content-start">
-          {filteredProducts.map(product => (
+          {filteredProducts.length === 0 && (
+            <div className="col-span-3 text-center text-gray-500 py-10">
+              {search ? `No se encontraron productos para "${search}"` : 'No hay productos registrados'}
+            </div>
+          )}
+          {filteredProducts.map(product => {
+            // --- CAMBIO: venta por pieza (sin cajas completas puede seguir vendiéndose por pieza) ---
+            const noStock = product.stock === 0 && maxQuantity(product, 'PIECE', 0) === 0;
+            return (
             <div key={product.id} onClick={() => addToCart(product, 'UNIT')}
-              className={`p-4 rounded-lg shadow cursor-pointer transition border-l-4 ${product.stock === 0 ? 'bg-gray-200 opacity-60' : 'bg-white hover:bg-blue-50 border-blue-500'}`}>
+              className={`p-4 rounded-lg shadow cursor-pointer transition border-l-4 ${noStock ? 'bg-gray-200 opacity-60' : 'bg-white hover:bg-blue-50 border-blue-500'}`}>
               <div className="font-bold text-lg truncate">{product.name}</div>
               <div className="text-gray-500 text-sm mb-2">{product.code}</div>
               <div className="flex justify-between items-center mt-2">
-                <span className="font-bold text-xl text-green-600">${product.price}</span>
-                <span className="text-xs px-2 py-1 bg-gray-200 rounded">Stock: {product.stock}</span>
+                <span className="font-bold text-xl text-green-600">{money(product.price)}</span>
+                <span className="text-xs px-2 py-1 bg-gray-200 rounded">
+                  {product.soldByPiece ? 'Cajas' : 'Stock'}: {product.stock}
+                </span>
               </div>
               {/* --- INICIO CAMBIO: venta por pieza --- */}
               {product.soldByPiece && (
                 <button
                   onClick={(e) => { e.stopPropagation(); addToCart(product, 'PIECE'); }}
                   className="mt-2 w-full text-xs font-bold bg-amber-100 text-amber-800 py-1.5 rounded hover:bg-amber-200">
-                  + Pieza (${product.piecePrice}) · sueltas: {product.looseStock || 0}
+                  + Pieza ({money(product.piecePrice)}) · sueltas: {product.looseStock || 0}
                 </button>
               )}
               {/* --- FIN CAMBIO: venta por pieza --- */}
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -154,27 +166,36 @@ export default function POS() {
       <div className="w-1/3 bg-white shadow-2xl flex flex-col border-l z-10">
         <div className="p-6 bg-gray-900 text-white flex justify-between items-center shadow-md">
           <h2 className="text-2xl font-bold">🛒 Carrito</h2>
-          <span className="bg-blue-600 px-3 py-1 rounded-full text-sm font-bold">{cart.reduce((a, i) => a + i.quantity, 0)} arts.</span>
+          <span className="bg-blue-600 px-3 py-1 rounded-full text-sm font-bold">{cart.reduce((a, l) => a + l.quantity, 0)} arts.</span>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
-          {cart.map(item => (
-            <div key={`${item.id}-${item.unitType}`} className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 flex flex-col gap-2">
+          {cartItems.map(item => (
+            <div key={`${item.productId}-${item.unitType}`} className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 flex flex-col gap-2">
               <div className="flex justify-between">
                 <div className="font-bold">
-                  {item.name}
+                  {item.product.name}
                   {/* --- CAMBIO: venta por pieza (etiqueta de tipo de renglón) --- */}
                   {item.unitType === 'PIECE' && <span className="ml-2 text-xs font-normal bg-amber-100 text-amber-800 px-2 py-0.5 rounded">pieza</span>}
                 </div>
-                <div className="font-bold text-blue-900">${(item.unitPrice * item.quantity).toFixed(2)}</div>
+                <div className="font-bold text-blue-900">{money(item.subtotal)}</div>
               </div>
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-3 bg-gray-100 rounded-lg p-1">
-                  <button onClick={() => removeFromCart(item.id, item.unitType)} className="w-8 h-8 text-red-500 bg-white rounded shadow-sm hover:bg-red-50">🗑️</button>
-                  <button onClick={() => updateQuantity(item.id, item.unitType, -1)} className="w-8 h-8 bg-white text-gray-700 rounded shadow-sm" disabled={item.quantity <= 1}>-</button>
-                  <span className="font-bold w-6 text-center">{item.quantity}</span>
-                  <button onClick={() => updateQuantity(item.id, item.unitType, 1)} className="w-8 h-8 bg-white text-blue-600 rounded shadow-sm">+</button>
+                  <button onClick={() => removeFromCart(item.productId, item.unitType)} className="w-8 h-8 text-red-500 bg-white rounded shadow-sm hover:bg-red-50">🗑️</button>
+                  <button onClick={() => setLineQuantity(item.productId, item.unitType, item.quantity - 1)} className="w-8 h-8 bg-white text-gray-700 rounded shadow-sm" disabled={item.quantity <= 1}>-</button>
+                  {/* --- CAMBIO: venta por pieza (cantidad editable, útil para vender p. ej. 30 piezas) --- */}
+                  <input type="number" min="1" step="1"
+                    className="w-14 text-center font-bold bg-white rounded border-0 py-1"
+                    value={item.quantity}
+                    onFocus={e => e.target.select()}
+                    onChange={e => {
+                      const qty = Math.floor(Number(e.target.value));
+                      if (qty >= 1) setLineQuantity(item.productId, item.unitType, qty);
+                    }} />
+                  <button onClick={() => setLineQuantity(item.productId, item.unitType, item.quantity + 1)} className="w-8 h-8 bg-white text-blue-600 rounded shadow-sm">+</button>
                 </div>
+                <span className="text-xs text-gray-500">{money(item.unitPrice)} c/u</span>
               </div>
             </div>
           ))}
