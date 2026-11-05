@@ -124,7 +124,7 @@ export default function POS() {
       {/* IZQUIERDA: Catálogo (IGUAL) */}
       <div className="w-2/3 p-4 flex flex-col">
         <div className="mb-4">
-          <input type="text" placeholder="🔍 Buscar..." className="w-full p-4 rounded-lg shadow border text-lg outline-none focus:ring-2 focus:ring-blue-500"
+          <input type="text" placeholder="🔍 Buscar..." autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}className="w-full p-4 rounded-lg shadow border text-lg outline-none focus:ring-2 focus:ring-blue-500"
             value={search} onChange={e => setSearch(e.target.value)} autoFocus />
         </div>
         <div className="grid grid-cols-3 gap-4 overflow-y-auto pb-20 content-start">

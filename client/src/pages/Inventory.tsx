@@ -59,7 +59,7 @@ export default function Inventory() {
       {/* --- INICIO CAMBIO: búsqueda de productos --- */}
       <div className="mb-4 flex items-center gap-3">
         <div className="relative flex-1">
-          <input type="text" placeholder="🔍 Buscar por nombre, código o categoría..."
+          <input type="text" placeholder="🔍 Buscar por nombre, código o categoría..." autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
             className="w-full p-3 pr-10 rounded-lg shadow border outline-none focus:ring-2 focus:ring-blue-500"
             value={search} onChange={e => setSearch(e.target.value)}
             onKeyDown={e => { if (e.key === 'Escape') setSearch(''); }} />
@@ -113,8 +113,9 @@ export default function Inventory() {
                   {/* --- INICIO CAMBIO: venta por pieza --- */}
                   {product.soldByPiece && (
                     <div className="text-xs text-amber-700 mt-1">
-                      {product.stock === 1 ? 'caja' : 'cajas'} + {product.looseStock || 0} sueltas
-                      <div className="text-gray-500">({totalPieces(product)} piezas, {product.piecesPerBox} por caja)</div>
+                      {product.stock === 1 ? 'caja' : 'cajas'} ({product.stock * (product.piecesPerBox || 0)} pzas)
+                      {(product.looseStock || 0) > 0 && <> + {product.looseStock} de caja incompleta</>}
+                      <div className="text-gray-500">= {totalPieces(product)} piezas ({product.piecesPerBox} por caja)</div>
                     </div>
                   )}
                   {/* --- FIN CAMBIO: venta por pieza --- */}
