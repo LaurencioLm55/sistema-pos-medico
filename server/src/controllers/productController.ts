@@ -36,6 +36,11 @@ const parsePieceFields = (body: any) => {
     if (!Number.isInteger(looseStock) || looseStock < 0) {
       return { error: 'Las piezas sueltas deben ser un número entero mayor o igual a 0' };
     }
+    // Las sueltas son el sobrante de cajas abiertas, así que siempre son menos que una caja completa.
+    // Si son más, en realidad son cajas y se contarían doble (ej. 2 cajas de 12 + 22 sueltas = 46 piezas).
+    if (looseStock >= piecesPerBox) {
+      return { error: `Las piezas sueltas deben ser menos que las piezas por caja (${piecesPerBox}). Si tienes más, agrégalas como cajas en "Stock".` };
+    }
     data.looseStock = looseStock;
   }
 

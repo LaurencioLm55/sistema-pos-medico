@@ -74,6 +74,11 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
         alert('Indica el precio de venta por pieza (mayor a 0).');
         return;
       }
+      const loose = Number(formData.looseStock || 0);
+      if (!Number.isInteger(loose) || loose < 0 || loose >= Number(formData.piecesPerBox)) {
+        alert(`Las piezas sueltas deben ser menos que las piezas por caja (${formData.piecesPerBox}). Si tienes más, agrégalas como cajas en "Stock".`);
+        return;
+      }
     }
     // --- FIN CAMBIO: venta por pieza ---
 
@@ -143,11 +148,15 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
             <div>
               <label className="block text-xs font-bold text-gray-700">Código</label>
               <input type="text" required className="w-full border p-2 rounded"
+                autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
                 value={formData.code} onChange={e => setFormData({...formData, code: e.target.value})} />
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700">Nombre</label>
+              {/* Sin autocorrección: nombres de medicamentos como "Tabcin" o "Coriver" no están en el diccionario
+                  y el teclado/navegador los "corregía" a "Tabcina" / "Correver". */}
               <input type="text" required className="w-full border p-2 rounded"
+                autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
                 value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
             </div>
           </div>
@@ -167,6 +176,7 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
             ) : (
               <div className="flex gap-2">
                 <input type="text" placeholder="Nueva categoría..." className="w-full border p-2 rounded"
+                  autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
                   value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} />
                 <button type="button" onClick={handleCreateCategory} className="bg-green-600 text-white px-3 rounded">Ok</button>
                 <button type="button" onClick={() => setShowCatInput(false)} className="text-red-500 px-2">X</button>
@@ -222,16 +232,26 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
                       onChange={e => setFormData({...formData, piecePrice: e.target.value})} />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-700">Piezas sueltas</label>
-                    <input type="number" min="0" step="1" className="w-full border p-2 rounded" placeholder="0"
+                    <label className="block text-xs font-bold text-gray-700">Piezas de caja incompleta</label>
+                    <input type="number" min="0" step="1"
+                      max={Number(formData.piecesPerBox) > 0 ? Number(formData.piecesPerBox) - 1 : undefined}
+                      className="w-full border p-2 rounded" placeholder="0"
                       value={formData.looseStock}
                       onChange={e => setFormData({...formData, looseStock: e.target.value})} />
                   </div>
                 </div>
                 <p className="text-xs text-gray-500 mt-2">
-                  "Piezas sueltas" son las que quedan de una caja ya abierta. Al vender por pieza se descuentan
-                  primero las sueltas y, si no alcanzan, se abre una caja del stock automáticamente.
+                  Las piezas de las cajas completas se suman solas. Llena "Piezas de caja incompleta" solo si
+                  alguna caja no viene completa (siempre menos que las piezas por caja). Al vender por pieza se
+                  descuentan primero esas piezas y, si no alcanzan, se abre una caja del stock automáticamente.
                 </p>
+                {Number(formData.piecesPerBox) > 0 && (
+                  <p className="text-sm font-semibold text-blue-700 mt-2">
+                    Total: {Number(formData.stock || 0)} {Number(formData.stock) === 1 ? 'caja' : 'cajas'} × {Number(formData.piecesPerBox)} = {Number(formData.stock || 0) * Number(formData.piecesPerBox)} piezas
+                    {Number(formData.looseStock) > 0 && <> + {Number(formData.looseStock)} de caja incompleta</>}
+                    {' '}= {Number(formData.stock || 0) * Number(formData.piecesPerBox) + Number(formData.looseStock || 0)} piezas en total
+                  </p>
+                )}
                 {Number(formData.piecesPerBox) > 0 && Number(formData.price) > 0 && (
                   <p className="text-xs text-amber-700 mt-1">
                     Caja: {money(formData.price)} · Pieza a precio de caja: {money(Number(formData.price) / Number(formData.piecesPerBox))}
