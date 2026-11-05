@@ -36,7 +36,7 @@ export default function Login({ onLoginSuccess }: Props) {
           <img 
             src="/logo.png" 
             alt="Logo Empresa" 
-            className="h-64 mx-auto mb-4 object-contain" 
+            className="h-32 sm:h-64 mx-auto mb-4 object-contain" 
           />
           
         </div>

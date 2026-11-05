@@ -120,16 +120,16 @@ export default function POS() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-100 overflow-hidden">
+    <div className="flex flex-col lg:flex-row min-h-full lg:h-screen bg-gray-100 lg:overflow-hidden">
       {/* IZQUIERDA: Catálogo (IGUAL) */}
-      <div className="w-2/3 p-4 flex flex-col">
+      <div className="w-full lg:w-2/3 p-4 flex flex-col min-h-0">
         <div className="mb-4">
-          <input type="text" placeholder="🔍 Buscar..." autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}className="w-full p-4 rounded-lg shadow border text-lg outline-none focus:ring-2 focus:ring-blue-500"
+          <input type="text" placeholder="🔍 Buscar..." autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} className="w-full p-4 rounded-lg shadow border text-lg outline-none focus:ring-2 focus:ring-blue-500"
             value={search} onChange={e => setSearch(e.target.value)} autoFocus />
         </div>
-        <div className="grid grid-cols-3 gap-4 overflow-y-auto pb-20 content-start">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 overflow-y-auto max-h-[60vh] lg:max-h-none lg:pb-20 content-start">
           {filteredProducts.length === 0 && (
-            <div className="col-span-3 text-center text-gray-500 py-10">
+            <div className="col-span-full text-center text-gray-500 py-10">
               {search ? `No se encontraron productos para "${search}"` : 'No hay productos registrados'}
             </div>
           )}
@@ -163,8 +163,8 @@ export default function POS() {
       </div>
 
       {/* DERECHA: Carrito */}
-      <div className="w-1/3 bg-white shadow-2xl flex flex-col border-l z-10">
-        <div className="p-6 bg-gray-900 text-white flex justify-between items-center shadow-md">
+      <div className="w-full lg:w-1/3 min-h-[24rem] lg:min-h-0 bg-white shadow-2xl flex flex-col border-t lg:border-t-0 lg:border-l z-10">
+        <div className="p-4 lg:p-6 bg-gray-900 text-white flex justify-between items-center shadow-md">
           <h2 className="text-2xl font-bold">🛒 Carrito</h2>
           <span className="bg-blue-600 px-3 py-1 rounded-full text-sm font-bold">{cart.reduce((a, l) => a + l.quantity, 0)} arts.</span>
         </div>
@@ -201,10 +201,10 @@ export default function POS() {
           ))}
         </div>
 
-        <div className="p-6 bg-white border-t">
+        <div className="p-4 lg:p-6 bg-white border-t">
           <div className="flex justify-between items-end mb-4">
             <span className="text-gray-500 font-medium">Total:</span>
-            <span className="text-4xl font-extrabold text-gray-800">${total.toFixed(2)}</span>
+            <span className="text-3xl xl:text-4xl font-extrabold text-gray-800">${total.toFixed(2)}</span>
           </div>
           <button onClick={handlePreCheckout} disabled={cart.length === 0}
             className="w-full bg-green-600 text-white py-4 rounded-xl text-xl font-bold shadow-lg hover:bg-green-700 disabled:bg-gray-300">
@@ -215,8 +215,8 @@ export default function POS() {
 
       {/* --- MODAL DE SELECCIÓN DE PAGO --- */}
       {isPaymentModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white p-6 sm:p-8 rounded-xl shadow-2xl w-full max-w-md max-h-full overflow-y-auto">
             <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Confirmar Pago</h2>
             
             <div className="text-center mb-8">
@@ -225,7 +225,7 @@ export default function POS() {
             </div>
 
             <label className="block text-sm font-bold text-gray-700 mb-2">Método de Pago:</label>
-            <div className="grid grid-cols-3 gap-3 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
               {['EFECTIVO', 'TARJETA', 'TRANSFERENCIA'].map(method => (
                 <button
                   key={method}

@@ -137,14 +137,14 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+      <div className="bg-white rounded-lg p-6 w-full max-w-xl max-h-full overflow-y-auto">
         <h2 className="text-xl font-bold mb-4">
           {productToEdit ? '✏️ Editar Producto' : '✨ Nuevo Producto'}
         </h2>
         
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Código y Nombre */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
               <label className="block text-xs font-bold text-gray-700">Código</label>
               <input type="text" required className="w-full border p-2 rounded"
@@ -185,7 +185,7 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
           </div>
 
           {/* Precios y Stock */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div>
               <label className="block text-xs font-bold text-gray-700">Precio de proveedor</label>
               <input type="number" step="0.01" required className="w-full border p-2 rounded"
@@ -218,7 +218,7 @@ export default function CreateProductModal({ isOpen, onClose, onSuccess, product
 
             {formData.soldByPiece && (
               <>
-                <div className="grid grid-cols-3 gap-2 mt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
                   <div>
                     <label className="block text-xs font-bold text-gray-700">Piezas por caja</label>
                     <input type="number" min="1" step="1" required className="w-full border p-2 rounded"

@@ -27,11 +27,11 @@ export default function SalesHistory() {
   }, []);
 
   return (
-    <div className="p-8 bg-gray-100 min-h-screen">
+    <div className="p-4 md:p-8 bg-gray-100 min-h-full">
       <h1 className="text-3xl font-bold mb-6 text-gray-800">💰 Historial de Ventas</h1>
       
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="w-full text-left">
+      <div className="bg-white rounded-lg shadow overflow-x-auto">
+        <table className="w-full min-w-[560px] text-left">
           <thead className="bg-gray-800 text-white">
             <tr>
               <th className="p-4">ID</th>
@@ -74,13 +74,13 @@ export default function SalesHistory() {
       {/* --- MODAL DE DETALLES --- */}
       {selectedSale && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg overflow-hidden animate-fadeIn">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-full flex flex-col overflow-hidden animate-fadeIn">
             <div className="bg-gray-800 text-white p-4 flex justify-between items-center">
               <h3 className="font-bold text-lg">Detalle de Venta #{selectedSale.id}</h3>
               <button onClick={() => setSelectedSale(null)} className="text-gray-400 hover:text-white">✕</button>
             </div>
             
-            <div className="p-6 max-h-[70vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 flex-1 overflow-y-auto">
               <div className="mb-4 text-sm text-gray-500 flex justify-between">
                 <span>{new Date(selectedSale.createdAt).toLocaleString()}</span>
                 <span className="font-bold text-gray-700">{selectedSale.paymentMethod}</span>

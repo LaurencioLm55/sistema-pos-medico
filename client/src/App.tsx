@@ -44,17 +44,10 @@ function App() {
   return (
     <BrowserRouter>
       <div className="flex h-screen bg-gray-100">
-        <Sidebar />
-        
-        {/* Botón de Salir Flotante (Temporal, luego lo pones en el Sidebar) */}
-        <button 
-          onClick={handleLogout}
-          className="fixed bottom-4 left-4 bg-red-600 text-white px-4 py-2 rounded text-xs z-50 hover:bg-red-700"
-        >
-          Cerrar Sesión
-        </button>
+        <Sidebar onLogout={handleLogout} />
 
-        <div className="flex-1 overflow-auto">
+        {/* min-w-0 evita que el contenido ensanche la página; el scroll queda dentro de esta zona */}
+        <div className="flex-1 min-w-0 overflow-auto">
           <Routes>
             <Route path="/" element={<POS />} />
             <Route path="/inventory" element={<Inventory />} />

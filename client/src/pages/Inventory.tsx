@@ -48,8 +48,8 @@ export default function Inventory() {
   const filteredProducts = products.filter(p => matchesSearch(p, search));
 
   return (
-    <div className="p-8 bg-gray-50 min-h-screen">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-4 md:p-8 bg-gray-50 min-h-full">
+      <div className="flex flex-wrap gap-3 justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-800">📦 Inventario</h1>
         <button onClick={handleNew} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-medium shadow">
           + Nuevo Producto
@@ -74,8 +74,8 @@ export default function Inventory() {
       </div>
       {/* --- FIN CAMBIO: búsqueda de productos --- */}
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="w-full text-left border-collapse">
+      <div className="bg-white rounded-lg shadow overflow-x-auto">
+        <table className="w-full min-w-[720px] text-left border-collapse">
           <thead className="bg-gray-800 text-white">
             <tr>
               <th className="p-4">Código</th>
@@ -120,13 +120,15 @@ export default function Inventory() {
                   )}
                   {/* --- FIN CAMBIO: venta por pieza --- */}
                 </td>
-                <td className="p-4 text-center flex justify-center gap-2">
+                <td className="p-4 text-center">
+                  <div className="flex justify-center gap-2">
                   <button onClick={() => handleEdit(product)} className="text-blue-600 hover:text-blue-800 px-2 py-1 bg-blue-50 rounded" title="Editar">
                     ✏️
                   </button>
                   <button onClick={() => handleDelete(product.id, product.name)} className="text-red-600 hover:text-red-800 px-2 py-1 bg-red-50 rounded" title="Eliminar">
                     🗑️
                   </button>
+                  </div>
                 </td>
               </tr>
             ))}
